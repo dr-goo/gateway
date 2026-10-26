@@ -737,7 +737,75 @@ describe('GoogleChatCompleteStreamChunkTransform', () => {
     );
 
     expect(parsedA.choices[0].delta.tool_calls[0].index).toBe(0);
+    expect(parsedA.choices[0].delta.content).toBeUndefined();
     expect(parsedB.choices[0].delta.tool_calls[0].index).toBe(1);
     expect(parsedFinish.choices[0].finish_reason).toBe('tool_calls');
+  });
+
+  it('filters out thinking/text content_blocks in strict mode when an image is in the same chunk and ignores empty text parts', () => {
+    const streamState: Record<string, any> = {};
+    const imageAndThoughtChunk = JSON.stringify({
+      modelVersion: 'gemini-3-pro-image',
+      candidates: [
+        {
+          index: 0,
+          content: {
+            parts: [
+              { text: 'secret thinking', thought: true },
+              {
+                inlineData: {
+                  mimeType: 'image/png',
+                  data: 'aGVsbG8=',
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const emptyTextSignedChunk = JSON.stringify({
+      modelVersion: 'gemini-3-pro-image',
+      candidates: [
+        {
+          index: 0,
+          content: {
+            parts: [{ text: '', thoughtSignature: 'sig_final' }],
+          },
+          finishReason: 'STOP',
+        },
+      ],
+    });
+
+    const parsedImage = JSON.parse(
+      GoogleChatCompleteStreamChunkTransform(
+        `data: ${imageAndThoughtChunk}`,
+        'vertex-3',
+        streamState,
+        true
+      )
+        .replace(/^data: /, '')
+        .trim()
+    );
+    const parsedEmpty = JSON.parse(
+      GoogleChatCompleteStreamChunkTransform(
+        `data: ${emptyTextSignedChunk}`,
+        'vertex-3',
+        streamState,
+        false
+      )
+        .replace(/^data: /, '')
+        .trim()
+    );
+
+    expect(parsedImage.choices[0].delta.content_blocks).toEqual([
+      {
+        index: 1,
+        delta: {
+          type: 'image_url',
+          image_url: { url: 'data:image/png;base64,aGVsbG8=' },
+        },
+      },
+    ]);
+    expect(parsedEmpty.choices[0].delta.content_blocks).toBeUndefined();
   });
 });

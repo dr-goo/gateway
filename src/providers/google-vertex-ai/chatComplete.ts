@@ -728,7 +728,7 @@ export const GoogleChatCompleteStreamChunkTransform: (
                   }),
               },
             });
-          } else if (part.text !== undefined) {
+          } else if (part.text) {
             if (part.thought) {
               contentBlocks.push({
                 index: 0,
@@ -736,7 +736,7 @@ export const GoogleChatCompleteStreamChunkTransform: (
               });
               streamState.containsChainOfThoughtMessage = true;
             } else {
-              content += part.text ?? '';
+              content += part.text;
               contentBlocks.push({
                 index: streamState.containsChainOfThoughtMessage ? 1 : 0,
                 delta: { text: part.text },
@@ -765,13 +765,23 @@ export const GoogleChatCompleteStreamChunkTransform: (
                 strictOpenAiCompliance
               )
           : null;
+        const filteredContentBlocks = strictOpenAiCompliance
+          ? contentBlocks.filter((b) => b.delta?.type === 'image_url')
+          : contentBlocks;
+        const hasOnlyNonTextParts =
+          !content &&
+          (toolCalls.length > 0 ||
+            (filteredContentBlocks.length > 0 &&
+              filteredContentBlocks.every(
+                (b) => b.delta?.type === 'image_url'
+              )));
         const message: any = {
           role: 'assistant',
-          content,
+          ...(!hasOnlyNonTextParts && { content }),
           ...(toolCalls.length && { tool_calls: toolCalls }),
-          ...((!strictOpenAiCompliance ||
-            contentBlocks.some((b) => b.delta?.type === 'image_url')) &&
-            contentBlocks.length && { content_blocks: contentBlocks }),
+          ...(filteredContentBlocks.length && {
+            content_blocks: filteredContentBlocks,
+          }),
         };
         return {
           delta: message,
