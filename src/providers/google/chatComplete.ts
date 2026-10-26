@@ -873,7 +873,7 @@ export const GoogleChatCompleteStreamChunkTransform: (
           const filteredContentBlocks = strictOpenAiCompliance
             ? contentBlocks.filter((b) => b.delta?.type === 'image_url')
             : contentBlocks;
-          const hasOnlyNonTextParts =
+          const omitEmptyContent =
             !content &&
             (toolCalls.length > 0 ||
               (filteredContentBlocks.length > 0 &&
@@ -882,7 +882,7 @@ export const GoogleChatCompleteStreamChunkTransform: (
                 )));
           const message: any = {
             role: 'assistant',
-            ...(!hasOnlyNonTextParts && { content }),
+            ...(!omitEmptyContent && { content }),
             ...(toolCalls.length && { tool_calls: toolCalls }),
             ...(filteredContentBlocks.length && {
               content_blocks: filteredContentBlocks,
